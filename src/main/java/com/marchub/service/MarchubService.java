@@ -470,16 +470,19 @@ public class MarchubService {
     }
 
     private void sendEmail(String to, String subject, String html) {
-        try {
-            MimeMessage msg = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(msg, true);
-            helper.setTo(to);
-            helper.setSubject(subject);
-            helper.setText(html, true);
-            helper.setFrom("marchub2026@gmail.com");
-            mailSender.send(msg);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        new Thread(() -> {
+            try {
+                MimeMessage msg = mailSender.createMimeMessage();
+                MimeMessageHelper helper = new MimeMessageHelper(msg, true);
+                helper.setTo(to);
+                helper.setSubject(subject);
+                helper.setText(html, true);
+                helper.setFrom("marchub2026@gmail.com");
+                mailSender.send(msg);
+                System.out.println("Email sent to " + to + " | subject: " + subject);
+            } catch (Exception e) {
+                System.err.println("Failed to send email to " + to + ": " + e.getMessage());
+            }
+        }).start();
     }
 }
