@@ -361,6 +361,7 @@ public class MarchubService {
         if (req.getTitle() != null) i.setTitle(req.getTitle());
         if (req.getDescription() != null) i.setDescription(req.getDescription());
         if (req.getRequirements() != null) i.setRequirements(req.getRequirements());
+        if (req.getActive() != null) i.setActive(req.getActive());
         internRepo.save(i);
         res.put("success", true);
         res.put("internship", i);
