@@ -254,16 +254,19 @@ public class MarchubService {
                 + "<hr style='border:none;border-top:1px solid #e5e7eb;margin:1.5rem 0;'/>"
                 + "<p style='color:#888;font-size:.78rem;'>If you didn't request this, ignore this email.</p></div>";
             helper.setText(html, true);
-            helper.setFrom("marchub2026@gmail.com");
+            String fromEmail = System.getenv("MAIL_USER");
+            if (fromEmail == null || fromEmail.isEmpty()) fromEmail = "marchub2026@gmail.com";
+            helper.setFrom(fromEmail);
             mailSender.send(msg);
             res.put("success", true);
             res.put("message", "OTP sent to your email");
             res.put("otp", code);
         } catch (Exception e) {
-            res.put("success", true); // still allow reset
+            res.put("success", true);
             res.put("message", "Your OTP: " + code);
             res.put("otp", code);
             res.put("emailFailed", true);
+            res.put("emailError", e.getMessage());
         }
         return res;
     }
@@ -554,7 +557,9 @@ public class MarchubService {
                 helper.setTo(to);
                 helper.setSubject(subject);
                 helper.setText(html, true);
-                helper.setFrom("marchub2026@gmail.com");
+                String fromEmail = System.getenv("MAIL_USER");
+                if (fromEmail == null || fromEmail.isEmpty()) fromEmail = "marchub2026@gmail.com";
+                helper.setFrom(fromEmail);
                 mailSender.send(msg);
                 System.out.println("Email sent to " + to + " | subject: " + subject);
             } catch (Exception e) {
