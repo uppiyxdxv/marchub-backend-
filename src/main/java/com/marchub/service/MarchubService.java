@@ -17,6 +17,14 @@ public class MarchubService {
 
     private static final String ADMIN_EMAIL = "marchub2026@gmail.com";
     private static final String ADMIN_PASS = "Uppiyxdxv@2004";
+    private static final Map<String, OtpEntry> otpStore = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long OTP_EXPIRY_MS = 300_000; // 5 min
+
+    private static class OtpEntry {
+        final String code;
+        final long expiresAt;
+        OtpEntry(String code, long expiresAt) { this.code = code; this.expiresAt = expiresAt; }
+    }
 
     private final UserRepository userRepo;
     private final EnrollmentRepository enrollRepo;
@@ -213,6 +221,60 @@ public class MarchubService {
             res.put("success", false);
             res.put("message", "No account with that email");
         }
+        return res;
+    }
+
+    public Map<String, Object> sendOtp(SendOtpRequest req) {
+        Map<String, Object> res = new HashMap<>();
+        String email = req.getEmail();
+        if (ADMIN_EMAIL.equals(email)) {
+            res.put("success", false);
+            res.put("message", "Admin OTP not supported");
+            return res;
+        }
+        Optional<User> opt = userRepo.findByEmail(email);
+        if (opt.isEmpty()) {
+            res.put("success", false);
+            res.put("message", "No account with that email");
+            return res;
+        }
+        String code = String.format("%06d", new Random().nextInt(999999));
+        otpStore.put(email, new OtpEntry(code, System.currentTimeMillis() + OTP_EXPIRY_MS));
+        String html = "<div style='font-family:sans-serif;max-width:480px;margin:auto;padding:2rem;border:1px solid #e5e7eb;border-radius:12px;'>"
+            + "<h2 style='color:#7c3aed;'>MarcHub</h2>"
+            + "<p>Your OTP for password reset:</p>"
+            + "<div style='font-size:2rem;font-weight:800;letter-spacing:.2em;text-align:center;padding:1rem;background:#f5f3ff;border-radius:8px;color:#7c3aed;'>" + code + "</div>"
+            + "<p style='color:#888;font-size:.85rem;'>This code expires in 5 minutes.</p>"
+            + "<hr style='border:none;border-top:1px solid #e5e7eb;margin:1.5rem 0;'/>"
+            + "<p style='color:#888;font-size:.78rem;'>If you didn't request this, ignore this email.</p></div>";
+        sendEmail(email, "MarcHub – Password Reset OTP", html);
+        res.put("success", true);
+        res.put("message", "OTP sent to your email");
+        return res;
+    }
+
+    public Map<String, Object> verifyOtp(VerifyOtpRequest req) {
+        Map<String, Object> res = new HashMap<>();
+        OtpEntry entry = otpStore.get(req.getEmail());
+        if (entry == null) {
+            res.put("success", false);
+            res.put("message", "No OTP requested for this email");
+            return res;
+        }
+        if (System.currentTimeMillis() > entry.expiresAt) {
+            otpStore.remove(req.getEmail());
+            res.put("success", false);
+            res.put("message", "OTP expired. Request a new one.");
+            return res;
+        }
+        if (!entry.code.equals(req.getOtp())) {
+            res.put("success", false);
+            res.put("message", "Incorrect OTP");
+            return res;
+        }
+        otpStore.remove(req.getEmail());
+        res.put("success", true);
+        res.put("message", "OTP verified");
         return res;
     }
 

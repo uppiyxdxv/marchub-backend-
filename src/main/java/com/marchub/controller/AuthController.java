@@ -37,6 +37,16 @@ public class AuthController {
         return service.checkUser(req);
     }
 
+    @PostMapping("/send-otp")
+    public Map<String, Object> sendOtp(@RequestBody SendOtpRequest req) {
+        return service.sendOtp(req);
+    }
+
+    @PostMapping("/verify-otp")
+    public Map<String, Object> verifyOtp(@RequestBody VerifyOtpRequest req) {
+        return service.verifyOtp(req);
+    }
+
     @PostMapping("/reset-password")
     public Map<String, Object> resetPassword(@RequestBody ResetPasswordRequest req) {
         return service.resetPassword(req);
