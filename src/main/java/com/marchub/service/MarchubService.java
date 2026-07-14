@@ -320,6 +320,16 @@ public class MarchubService {
             res.put("success", true);
             res.put("message", "Certificate verified");
         }
+        String html = """
+            <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;border:2px solid #7c3aed;border-radius:12px;padding:2rem;text-align:center;">
+              <h1 style="color:#7c3aed;">🎉 Certificate Issued!</h1>
+              <p>Your <strong>%s</strong> certificate from <strong>MarcHub</strong> has been verified and issued.</p>
+              <p>Login to your dashboard to view and download: <a href="https://marchub-backend-wexu.onrender.com">MarcHub Dashboard</a></p>
+              <hr style="border:none;border-top:1px solid #e5e7eb;margin:1.5rem 0;">
+              <p style="font-size:.8rem;color:#888;">— MarcHub Team</p>
+            </div>
+            """.formatted(req.getCourse());
+        sendEmail(req.getEmail(), "MarcHub – Certificate Issued: " + req.getCourse(), html);
         return res;
     }
 
@@ -406,19 +416,54 @@ public class MarchubService {
             return res;
         }
         InternshipRegistration reg = opt.get();
+        String subject = "";
+        String html = "";
         switch (req.getAction()) {
             case "approve" -> {
                 reg.setStatus(InternshipRegistration.Status.APPROVED);
                 reg.setOfferLetterUrl("https://marchub-backend-wexu.onrender.com/offer-letter/" + reg.getId());
+                subject = "MarcHub – Internship Approved!";
+                html = """
+                    <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;border:2px solid #10b981;border-radius:12px;padding:2rem;text-align:center;">
+                      <h1 style="color:#10b981;">✅ Approved!</h1>
+                      <p>Congratulations <strong>%s</strong>, your internship application has been <strong>approved</strong>!</p>
+                      <p>Check your offer letter: <a href="%s">Download Offer Letter</a></p>
+                      <hr style="border:none;border-top:1px solid #e5e7eb;margin:1.5rem 0;">
+                      <p style="font-size:.8rem;color:#888;">— MarcHub Team</p>
+                    </div>
+                    """.formatted(reg.getName(), reg.getOfferLetterUrl());
             }
-            case "reject" -> reg.setStatus(InternshipRegistration.Status.REJECTED);
+            case "reject" -> {
+                reg.setStatus(InternshipRegistration.Status.REJECTED);
+                subject = "MarcHub – Internship Update";
+                html = """
+                    <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;border:2px solid #ef4444;border-radius:12px;padding:2rem;text-align:center;">
+                      <h1 style="color:#ef4444;">😔 Application Status</h1>
+                      <p>Dear <strong>%s</strong>, we regret to inform you that your internship application has not been selected at this time.</p>
+                      <p>Keep learning and try again!</p>
+                      <hr style="border:none;border-top:1px solid #e5e7eb;margin:1.5rem 0;">
+                      <p style="font-size:.8rem;color:#888;">— MarcHub Team</p>
+                    </div>
+                    """.formatted(reg.getName());
+            }
             case "complete" -> {
                 reg.setStatus(InternshipRegistration.Status.COMPLETED);
                 reg.setTasksCompleted(true);
                 reg.setInternshipCertificateId("INT-CERT-" + System.currentTimeMillis());
+                subject = "MarcHub – Internship Completed!";
+                html = """
+                    <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;border:2px solid #7c3aed;border-radius:12px;padding:2rem;text-align:center;">
+                      <h1 style="color:#7c3aed;">🎉 Internship Complete!</h1>
+                      <p>Congratulations <strong>%s</strong>, you have successfully completed your internship!</p>
+                      <p>Your certificate ID: <code style="background:#f3f4f6;padding:.2rem .6rem;border-radius:4px;">%s</code></p>
+                      <hr style="border:none;border-top:1px solid #e5e7eb;margin:1.5rem 0;">
+                      <p style="font-size:.8rem;color:#888;">— MarcHub Team</p>
+                    </div>
+                    """.formatted(reg.getName(), reg.getInternshipCertificateId());
             }
         }
         internRegRepo.save(reg);
+        sendEmail(reg.getEmail(), subject, html);
         res.put("success", true);
         res.put("registration", reg);
         return res;
@@ -431,7 +476,7 @@ public class MarchubService {
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(html, true);
-            helper.setFrom("noreply@marchub.com");
+            helper.setFrom("marchub2026@gmail.com");
             mailSender.send(msg);
         } catch (Exception e) {
             e.printStackTrace();
