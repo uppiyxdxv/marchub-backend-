@@ -250,6 +250,7 @@ public class MarchubService {
         sendEmail(email, "MarcHub – Password Reset OTP", html);
         res.put("success", true);
         res.put("message", "OTP sent to your email");
+        res.put("otp", code);
         return res;
     }
 
