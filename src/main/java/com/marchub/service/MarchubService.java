@@ -240,17 +240,31 @@ public class MarchubService {
         }
         String code = String.format("%06d", new Random().nextInt(999999));
         otpStore.put(email, new OtpEntry(code, System.currentTimeMillis() + OTP_EXPIRY_MS));
-        String html = "<div style='font-family:sans-serif;max-width:480px;margin:auto;padding:2rem;border:1px solid #e5e7eb;border-radius:12px;'>"
-            + "<h2 style='color:#7c3aed;'>MarcHub</h2>"
-            + "<p>Your OTP for password reset:</p>"
-            + "<div style='font-size:2rem;font-weight:800;letter-spacing:.2em;text-align:center;padding:1rem;background:#f5f3ff;border-radius:8px;color:#7c3aed;'>" + code + "</div>"
-            + "<p style='color:#888;font-size:.85rem;'>This code expires in 5 minutes.</p>"
-            + "<hr style='border:none;border-top:1px solid #e5e7eb;margin:1.5rem 0;'/>"
-            + "<p style='color:#888;font-size:.78rem;'>If you didn't request this, ignore this email.</p></div>";
-        sendEmail(email, "MarcHub – Password Reset OTP", html);
-        res.put("success", true);
-        res.put("message", "OTP sent to your email");
-        res.put("otp", code);
+        // Send email synchronously and report failure
+        try {
+            MimeMessage msg = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(msg, true);
+            helper.setTo(email);
+            helper.setSubject("MarcHub – Password Reset OTP");
+            String html = "<div style='font-family:sans-serif;max-width:480px;margin:auto;padding:2rem;border:1px solid #e5e7eb;border-radius:12px;'>"
+                + "<h2 style='color:#7c3aed;'>MarcHub</h2>"
+                + "<p>Your OTP for password reset:</p>"
+                + "<div style='font-size:2rem;font-weight:800;letter-spacing:.2em;text-align:center;padding:1rem;background:#f5f3ff;border-radius:8px;color:#7c3aed;'>" + code + "</div>"
+                + "<p style='color:#888;font-size:.85rem;'>This code expires in 5 minutes.</p>"
+                + "<hr style='border:none;border-top:1px solid #e5e7eb;margin:1.5rem 0;'/>"
+                + "<p style='color:#888;font-size:.78rem;'>If you didn't request this, ignore this email.</p></div>";
+            helper.setText(html, true);
+            helper.setFrom("marchub2026@gmail.com");
+            mailSender.send(msg);
+            res.put("success", true);
+            res.put("message", "OTP sent to your email");
+            res.put("otp", code);
+        } catch (Exception e) {
+            res.put("success", true); // still allow reset
+            res.put("message", "Your OTP: " + code);
+            res.put("otp", code);
+            res.put("emailFailed", true);
+        }
         return res;
     }
 
