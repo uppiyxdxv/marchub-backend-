@@ -240,27 +240,38 @@ public class MarchubService {
         }
         String code = String.format("%06d", new Random().nextInt(999999));
         otpStore.put(email, new OtpEntry(code, System.currentTimeMillis() + OTP_EXPIRY_MS));
-        // Send email synchronously and report failure
+        // Send email via SendGrid API (HTTPS, works on Render free tier)
+        String html = "<div style='font-family:sans-serif;max-width:480px;margin:auto;padding:2rem;border:1px solid #e5e7eb;border-radius:12px;'>"
+            + "<h2 style='color:#7c3aed;'>MarcHub</h2>"
+            + "<p>Your OTP for password reset:</p>"
+            + "<div style='font-size:2rem;font-weight:800;letter-spacing:.2em;text-align:center;padding:1rem;background:#f5f3ff;border-radius:8px;color:#7c3aed;'>" + code + "</div>"
+            + "<p style='color:#888;font-size:.85rem;'>This code expires in 5 minutes.</p>"
+            + "<hr style='border:none;border-top:1px solid #e5e7eb;margin:1.5rem 0;'/>"
+            + "<p style='color:#888;font-size:.78rem;'>If you didn't request this, ignore this email.</p></div>";
         try {
-            MimeMessage msg = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(msg, true);
-            helper.setTo(email);
-            helper.setSubject("MarcHub – Password Reset OTP");
-            String html = "<div style='font-family:sans-serif;max-width:480px;margin:auto;padding:2rem;border:1px solid #e5e7eb;border-radius:12px;'>"
-                + "<h2 style='color:#7c3aed;'>MarcHub</h2>"
-                + "<p>Your OTP for password reset:</p>"
-                + "<div style='font-size:2rem;font-weight:800;letter-spacing:.2em;text-align:center;padding:1rem;background:#f5f3ff;border-radius:8px;color:#7c3aed;'>" + code + "</div>"
-                + "<p style='color:#888;font-size:.85rem;'>This code expires in 5 minutes.</p>"
-                + "<hr style='border:none;border-top:1px solid #e5e7eb;margin:1.5rem 0;'/>"
-                + "<p style='color:#888;font-size:.78rem;'>If you didn't request this, ignore this email.</p></div>";
-            helper.setText(html, true);
-            String fromEmail = System.getenv("MAIL_USER");
-            if (fromEmail == null || fromEmail.isEmpty()) fromEmail = "marchub2026@gmail.com";
-            helper.setFrom(fromEmail);
-            mailSender.send(msg);
-            res.put("success", true);
-            res.put("message", "OTP sent to your email");
-            res.put("otp", code);
+            String apiKey = System.getenv("SENDGRID_API_KEY");
+            if (apiKey != null && !apiKey.isEmpty()) {
+                String json = "{\"personalizations\":[{\"to\":[{\"email\":\"" + email + "\"}]}],\"from\":{\"email\":\"marchub2026@gmail.com\"},\"subject\":\"MarcHub – Password Reset OTP\",\"content\":[{\"type\":\"text/html\",\"value\":\"" + html.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "") + "\"}]}";
+                java.net.URL url = new java.net.URL("https://api.sendgrid.com/v3/mail/send");
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(10000);
+                conn.getOutputStream().write(json.getBytes("UTF-8"));
+                int code2 = conn.getResponseCode();
+                if (code2 >= 200 && code2 < 300) {
+                    res.put("success", true);
+                    res.put("message", "OTP sent to your email");
+                    res.put("otp", code);
+                } else {
+                    throw new Exception("SendGrid HTTP " + code2);
+                }
+            } else {
+                throw new Exception("SENDGRID_API_KEY not set");
+            }
         } catch (Exception e) {
             res.put("success", true);
             res.put("message", "Your OTP: " + code);
@@ -552,16 +563,21 @@ public class MarchubService {
     private void sendEmail(String to, String subject, String html) {
         new Thread(() -> {
             try {
-                MimeMessage msg = mailSender.createMimeMessage();
-                MimeMessageHelper helper = new MimeMessageHelper(msg, true);
-                helper.setTo(to);
-                helper.setSubject(subject);
-                helper.setText(html, true);
-                String fromEmail = System.getenv("MAIL_USER");
-                if (fromEmail == null || fromEmail.isEmpty()) fromEmail = "marchub2026@gmail.com";
-                helper.setFrom(fromEmail);
-                mailSender.send(msg);
-                System.out.println("Email sent to " + to + " | subject: " + subject);
+                String apiKey = System.getenv("SENDGRID_API_KEY");
+                if (apiKey == null || apiKey.isEmpty()) { System.err.println("SENDGRID_API_KEY not set"); return; }
+                String json = "{\"personalizations\":[{\"to\":[{\"email\":\"" + to + "\"}]}],\"from\":{\"email\":\"marchub2026@gmail.com\"},\"subject\":\"" + subject + "\",\"content\":[{\"type\":\"text/html\",\"value\":\"" + html.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "") + "\"}]}";
+                java.net.URL url = new java.net.URL("https://api.sendgrid.com/v3/mail/send");
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(10000);
+                conn.getOutputStream().write(json.getBytes("UTF-8"));
+                int code = conn.getResponseCode();
+                if (code >= 200 && code < 300) System.out.println("Email sent to " + to + " | subject: " + subject);
+                else System.err.println("SendGrid error " + code + " for " + to);
             } catch (Exception e) {
                 System.err.println("Failed to send email to " + to + ": " + e.getMessage());
             }
