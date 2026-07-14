@@ -1,12 +1,14 @@
 package com.marchub.service;
 
 import com.marchub.dto.*;
-import com.marchub.model.Enrollment;
-import com.marchub.model.User;
-import com.marchub.repository.EnrollmentRepository;
-import com.marchub.repository.UserRepository;
+import com.marchub.model.*;
+import com.marchub.repository.*;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import jakarta.mail.internet.MimeMessage;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -18,11 +20,27 @@ public class MarchubService {
 
     private final UserRepository userRepo;
     private final EnrollmentRepository enrollRepo;
+    private final CourseRepository courseRepo;
+    private final CertificateRepository certRepo;
+    private final InternshipRepository internRepo;
+    private final InternshipRegistrationRepository internRegRepo;
+    private final JavaMailSender mailSender;
 
-    public MarchubService(UserRepository userRepo, EnrollmentRepository enrollRepo) {
+    public MarchubService(UserRepository userRepo, EnrollmentRepository enrollRepo,
+                          CourseRepository courseRepo, CertificateRepository certRepo,
+                          InternshipRepository internRepo,
+                          InternshipRegistrationRepository internRegRepo,
+                          JavaMailSender mailSender) {
         this.userRepo = userRepo;
         this.enrollRepo = enrollRepo;
+        this.courseRepo = courseRepo;
+        this.certRepo = certRepo;
+        this.internRepo = internRepo;
+        this.internRegRepo = internRegRepo;
+        this.mailSender = mailSender;
     }
+
+    // ─── Auth ───
 
     public Map<String, Object> register(RegisterRequest req) {
         Map<String, Object> res = new HashMap<>();
@@ -123,6 +141,8 @@ public class MarchubService {
         return res;
     }
 
+    // ─── Enrollment ───
+
     public Map<String, Object> enroll(EnrollRequest req) {
         Map<String, Object> res = new HashMap<>();
         if (enrollRepo.existsByEmailAndCourse(req.getEmail(), req.getCourse())) {
@@ -138,6 +158,13 @@ public class MarchubService {
         e.setMessage(req.getMessage());
         e.setProgress(0);
         enrollRepo.save(e);
+
+        if (courseRepo.findByName(req.getCourse()).isPresent()) {
+            Course c = courseRepo.findByName(req.getCourse()).get();
+            if (c.getSlotsLeft() > 0) c.setSlotsLeft(c.getSlotsLeft() - 1);
+            courseRepo.save(c);
+        }
+
         res.put("success", true);
         res.put("message", "Enrolled successfully");
         return res;
@@ -208,5 +235,205 @@ public class MarchubService {
         res.put("success", true);
         res.put("message", "Password reset successful");
         return res;
+    }
+
+    // ─── Courses ───
+
+    public List<Course> getAllCourses() {
+        return courseRepo.findAll();
+    }
+
+    public Course getCourse(Long id) {
+        return courseRepo.findById(id).orElse(null);
+    }
+
+    public Map<String, Object> createCourse(CourseRequest req) {
+        Map<String, Object> res = new HashMap<>();
+        if (courseRepo.findByName(req.getName()).isPresent()) {
+            res.put("success", false);
+            res.put("message", "Course already exists");
+            return res;
+        }
+        Course c = new Course();
+        c.setName(req.getName());
+        c.setDescription(req.getDescription());
+        c.setPrice(req.getPrice());
+        c.setSlotsLeft(req.getSlotsLeft());
+        if (req.getDueDate() != null) c.setDueDate(LocalDate.parse(req.getDueDate()));
+        if (req.getNextBatchDate() != null) c.setNextBatchDate(LocalDate.parse(req.getNextBatchDate()));
+        courseRepo.save(c);
+        res.put("success", true);
+        res.put("course", c);
+        return res;
+    }
+
+    public Map<String, Object> updateCourse(Long id, CourseRequest req) {
+        Map<String, Object> res = new HashMap<>();
+        Optional<Course> opt = courseRepo.findById(id);
+        if (opt.isEmpty()) {
+            res.put("success", false);
+            res.put("message", "Course not found");
+            return res;
+        }
+        Course c = opt.get();
+        if (req.getName() != null) c.setName(req.getName());
+        if (req.getDescription() != null) c.setDescription(req.getDescription());
+        c.setPrice(req.getPrice());
+        c.setSlotsLeft(req.getSlotsLeft());
+        if (req.getDueDate() != null) c.setDueDate(LocalDate.parse(req.getDueDate()));
+        if (req.getNextBatchDate() != null) c.setNextBatchDate(LocalDate.parse(req.getNextBatchDate()));
+        courseRepo.save(c);
+        res.put("success", true);
+        res.put("course", c);
+        return res;
+    }
+
+    public Map<String, Object> deleteCourse(Long id) {
+        Map<String, Object> res = new HashMap<>();
+        courseRepo.deleteById(id);
+        res.put("success", true);
+        return res;
+    }
+
+    // ─── Certificates ───
+
+    public List<Certificate> getUserCertificates(String email) {
+        return certRepo.findByEmail(email);
+    }
+
+    public Map<String, Object> verifyCertificate(AdminActionRequest req) {
+        Map<String, Object> res = new HashMap<>();
+        Optional<Certificate> opt = certRepo.findByEmailAndCourse(req.getEmail(), req.getCourse());
+        if (opt.isEmpty()) {
+            Certificate c = new Certificate();
+            c.setEmail(req.getEmail());
+            c.setName("");
+            c.setCourse(req.getCourse());
+            c.setAdminVerified(true);
+            certRepo.save(c);
+            res.put("success", true);
+            res.put("message", "Certificate issued");
+        } else {
+            Certificate c = opt.get();
+            c.setAdminVerified(true);
+            certRepo.save(c);
+            res.put("success", true);
+            res.put("message", "Certificate verified");
+        }
+        return res;
+    }
+
+    public List<Certificate> getAllCertificates() {
+        return certRepo.findAll();
+    }
+
+    // ─── Internships ───
+
+    public List<Internship> getActiveInternships() {
+        return internRepo.findByActiveTrue();
+    }
+
+    public List<Internship> getAllInternships() {
+        return internRepo.findAll();
+    }
+
+    public Map<String, Object> createInternship(InternshipRequest req) {
+        Map<String, Object> res = new HashMap<>();
+        Internship i = new Internship();
+        i.setTitle(req.getTitle());
+        i.setDescription(req.getDescription());
+        i.setRequirements(req.getRequirements());
+        internRepo.save(i);
+        res.put("success", true);
+        res.put("internship", i);
+        return res;
+    }
+
+    public Map<String, Object> updateInternship(Long id, InternshipRequest req) {
+        Map<String, Object> res = new HashMap<>();
+        Optional<Internship> opt = internRepo.findById(id);
+        if (opt.isEmpty()) {
+            res.put("success", false);
+            res.put("message", "Internship not found");
+            return res;
+        }
+        Internship i = opt.get();
+        if (req.getTitle() != null) i.setTitle(req.getTitle());
+        if (req.getDescription() != null) i.setDescription(req.getDescription());
+        if (req.getRequirements() != null) i.setRequirements(req.getRequirements());
+        internRepo.save(i);
+        res.put("success", true);
+        res.put("internship", i);
+        return res;
+    }
+
+    public Map<String, Object> deleteInternship(Long id) {
+        Map<String, Object> res = new HashMap<>();
+        internRepo.deleteById(id);
+        res.put("success", true);
+        return res;
+    }
+
+    public Map<String, Object> registerForInternship(InternshipRegisterRequest req) {
+        Map<String, Object> res = new HashMap<>();
+        InternshipRegistration reg = new InternshipRegistration();
+        reg.setInternshipId(req.getInternshipId());
+        reg.setName(req.getName());
+        reg.setEmail(req.getEmail());
+        reg.setPhone(req.getPhone());
+        reg.setMessage(req.getMessage());
+        internRegRepo.save(reg);
+        res.put("success", true);
+        res.put("message", "Registration submitted");
+        return res;
+    }
+
+    public List<InternshipRegistration> getInternshipRegistrations(Long internshipId) {
+        return internRegRepo.findByInternshipId(internshipId);
+    }
+
+    public List<InternshipRegistration> getAllRegistrations() {
+        return internRegRepo.findAll();
+    }
+
+    public Map<String, Object> updateRegistrationStatus(AdminActionRequest req) {
+        Map<String, Object> res = new HashMap<>();
+        Optional<InternshipRegistration> opt = internRegRepo.findById(req.getId());
+        if (opt.isEmpty()) {
+            res.put("success", false);
+            res.put("message", "Registration not found");
+            return res;
+        }
+        InternshipRegistration reg = opt.get();
+        switch (req.getAction()) {
+            case "approve" -> {
+                reg.setStatus(InternshipRegistration.Status.APPROVED);
+                reg.setOfferLetterUrl("https://marchub-backend-wexu.onrender.com/offer-letter/" + reg.getId());
+            }
+            case "reject" -> reg.setStatus(InternshipRegistration.Status.REJECTED);
+            case "complete" -> {
+                reg.setStatus(InternshipRegistration.Status.COMPLETED);
+                reg.setTasksCompleted(true);
+                reg.setInternshipCertificateId("INT-CERT-" + System.currentTimeMillis());
+            }
+        }
+        internRegRepo.save(reg);
+        res.put("success", true);
+        res.put("registration", reg);
+        return res;
+    }
+
+    private void sendEmail(String to, String subject, String html) {
+        try {
+            MimeMessage msg = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(msg, true);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(html, true);
+            helper.setFrom("noreply@marchub.com");
+            mailSender.send(msg);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }
