@@ -100,7 +100,15 @@ public class PaymentController {
     public ResponseEntity<Map<String, Object>> verifyPayment(@RequestBody RazorpayVerifyRequest req) {
         Map<String, Object> res = new HashMap<>();
         try {
+            System.out.println("=== PAYMENT VERIFICATION DEBUG ===");
+            System.out.println("Order ID: " + req.getRazorpayOrderId());
+            System.out.println("Payment ID: " + req.getRazorpayPaymentId());
+            System.out.println("Signature: " + req.getRazorpaySignature());
+            System.out.println("Secret configured: " + (razorpaySecret != null && !razorpaySecret.isEmpty() ? "YES (length: " + razorpaySecret.length() + ")" : "NO"));
+            
             String sign = req.getRazorpayOrderId() + "|" + req.getRazorpayPaymentId();
+            System.out.println("Sign string: " + sign);
+            
             Mac sha256 = Mac.getInstance("HmacSHA256");
             SecretKeySpec keySpec = new SecretKeySpec(razorpaySecret.getBytes(), "HmacSHA256");
             sha256.init(keySpec);
@@ -112,6 +120,9 @@ public class PaymentController {
                 hexString.append(hex);
             }
             String calculatedSignature = hexString.toString();
+            System.out.println("Calculated signature: " + calculatedSignature);
+            System.out.println("Received signature: " + req.getRazorpaySignature());
+            System.out.println("Match: " + calculatedSignature.equals(req.getRazorpaySignature()));
 
             if (!calculatedSignature.equals(req.getRazorpaySignature())) {
                 res.put("success", false);
