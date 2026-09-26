@@ -62,7 +62,7 @@ public class PaymentController {
                 return ResponseEntity.badRequest().body(res);
             }
 
-            Integer amount = req.getAmount() != null ? req.getAmount() : 4900;
+            Integer amount = req.getAmount() != null ? req.getAmount() : 100;
             org.json.JSONObject orderRequest = new org.json.JSONObject()
                     .put("amount", amount)
                     .put("currency", "INR")
